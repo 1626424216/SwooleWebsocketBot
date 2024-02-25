@@ -8,8 +8,8 @@ foreach (glob('./class/*.class.php') as $file) {
     include './class/' . $file;
 }
 Swoole\Coroutine\run(function () {
-    $debug='';
-    $configs='';
+    $debug = '';
+    $configs = '';
     require './configs.php';
     $coroutineIds = [];
 
@@ -18,7 +18,7 @@ Swoole\Coroutine\run(function () {
 
         $config = $configs[$i];
 
-        $coroutineId = Swoole\Coroutine::create(function () use ($config,$debug) {
+        $coroutineId = Swoole\Coroutine::create(function () use ($config, $debug) {
             $inc = new bot_inc($config);
             $inc->run($debug);
         });
@@ -34,7 +34,8 @@ Swoole\Coroutine\run(function () {
         foreach ($coroutineIds as $key => $coroutineId) {
             $coroutineStats = Swoole\Coroutine::stats();
             if (!isset($coroutineStats[$coroutineId]) || $coroutineStats[$coroutineId]['finished']) {
-                if ($debug) echo "协程 [" . $coroutineId . "] 已结束" . PHP_EOL;
+                if ($debug)
+                    echo "协程 [" . $coroutineId . "] 已结束" . PHP_EOL;
 
                 unset($coroutineIds[$key]);
             }

@@ -2,7 +2,7 @@
 class bot_inc
 {
     private $op_data;
-    private $op_message;
+    private $op_message = [];
     private $config;
     private $botqq;
     private $coid;
@@ -20,7 +20,7 @@ class bot_inc
         if ($client->getStatusCode() == '403') {
             echo "[" . $this->coid . "]" . "自动退出 Toekn错误：" . $client->getStatusCode() . '/' . $client->errCode . PHP_EOL;
         } else if ($client->getStatusCode() == '-1' or $client->errCode == '114') {
-            echo "[" . $this->coid . "]" . "网络连接失败 ";
+            echo "[" . $this->coid . "]" . "网络连接失败 " . PHP_EOL;
         } else {
             $this->botqq = json_decode(@$client->recv()->data, true)['self_id'];
             echo "[" . $this->coid . "]" . "连接ws服务端成功：" . ' BOT_QQ：' . json_decode(@$client->recv()->data, true)['self_id'] . PHP_EOL;
@@ -56,7 +56,6 @@ class bot_inc
                         case 'request'://好友通知
                             break;
                         case 'message'://接收消息
-                            $this->update_op_message($op_data);
                             switch ($op_data['message_type']) {
                                 case 'private'://私聊消息
                                     echo "[" . $this->coid . "]" . '[' . date('Y-m-d H:i:s') . ']' . '(' . $op_data['user_id'] . ')：→私收：' . $op_data['message'] . PHP_EOL;
@@ -66,6 +65,7 @@ class bot_inc
                                     break;
                             }
                             $coroutineId = Swoole\Coroutine::create(function () use ($client, $op_data) {
+                                $this->op_message[swoole\Coroutine::getuid()] = $op_data;
                                 foreach (glob('./plugins/*.php') as $file) {
                                     $file = explode('/', $file)['2'];
                                     require './plugins/' . $file;
@@ -134,13 +134,9 @@ class bot_inc
             }
         }
     }
-    private function update_op_message($op_data)
-    {
-        $this->op_message = $op_data;
-    }
     private function send_msg($mess, $id = true, $type = 0, $reply = true)
     {
-        $op_data = $this->op_message;
+        $op_data = $this->op_message[swoole\Coroutine::getuid()];
         $type = [
             'private' => 2,
             'group' => 1,
@@ -208,5 +204,52 @@ class bot_inc
             $this->op_data->push(json_encode($message));
             echo "[" . $this->coid . "]" . '[' . date('Y-m-d H:i:s') . ']' . '(' . $op_data['user_id'] . ')：←私发：' . $mess . PHP_EOL;
         }
+    }
+    private function http_client($ip, $port = 443, $url = '/', $ssl = true, $post = false, $method = false, $timeout = 2)
+    {
+        if (!isset($ip) and !isset($port) and !isset($url)) {
+            return array('status' => false, 'msg' => '提交参数不全');
+        }
+        $cli = new Swoole\Coroutine\Http\Client($ip, $port, $ssl);
+        $cli->setHeaders([
+            'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0',
+            'Content-Type' => 'application/json; charset=utf-8'
+        ]);
+        $cli->set(['timeout' => $timeout]);
+        if ($post == !false) {
+            $cli->setMethod($method);
+            $cli->setData($post);
+            $cli->execute($url);
+        } else {
+            $cli->get($url);
+        }
+        $cli->close();
+
+        $status = $cli->getStatusCode();
+
+        if ($status !== 200) {
+            switch ($status) {
+                case -1:
+                    $status = "连接超时或网络错误";
+                    break;
+                case -2:
+                    $status = "请求超时";
+                    break;
+                case -3:
+                    $status = "服务器强制切断连接";
+                    break;
+                case -4:
+                    $status = "发送请求失败";
+                    break;
+                case 502:
+                    $status = "反馈502网关超时";
+                    break;
+                default:
+                    $status = "未知错误";
+                    break;
+            }
+            return array('status' => false, 'msg' => "连接网络错误：" . $status, 'body' => $cli->body);
+        }
+        return array('status' => true, 'body' => $cli->body);
     }
 }
